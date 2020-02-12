@@ -31,6 +31,18 @@ int main() {
     //unsigned error = lodepng_decode_file(&image, &width, &height, filename, LCT_RGB, bitdepth);
     if(error) printf("error %u: %s\n", error, lodepng_error_text(error));
 
+    /*generate some image*/
+    /*unsigned width = 512, height = 512;
+    unsigned char* image = malloc(width * height * 4);
+    unsigned x, y;
+    for(y = 0; y < height; y++)
+    for(x = 0; x < width; x++) {
+      image[4 * width * y + 4 * x + 0] = 145;
+      image[4 * width * y + 4 * x + 1] = 0;
+      image[4 * width * y + 4 * x + 2] = 0;
+      image[4 * width * y + 4 * x + 3] = 128;
+  }*/
+
     //Calculate image size
     unsigned image_size = width * height;
     int blur_size = 2;
@@ -42,6 +54,10 @@ int main() {
     //temp_image = (unsigned char*)malloc(image_size * sizeof(unsigned char));
     final_image = (unsigned char*)malloc(image_size * sizeof(unsigned char));
 
+/*    for(int c=1000; c<2000; c++) {
+          printf("%d\n", image[c]);
+    }
+*/
     cl_device_id device_id = NULL;
     cl_context context = NULL;
     cl_command_queue command_queue = NULL;
@@ -77,10 +93,13 @@ int main() {
 
     // Get Platform and Device Info
     ret = clGetPlatformIDs(1, &platform_id, &ret_num_platforms);
+    printf("%d\n", ret); //1
     ret = clGetDeviceIDs(platform_id, CL_DEVICE_TYPE_CPU, 1, &device_id, &ret_num_devices);
+    printf("%d\n", ret); //2
 
     // Create OpenCL context
     context = clCreateContext(NULL, 1, &device_id, NULL, NULL, &ret);
+
 
     // Create Command Queue
     command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
@@ -91,26 +110,32 @@ int main() {
 
     // Build Kernel Program
     ret = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
+    printf("%d\n", ret); //3
 
     // Create OpenCL Kernel
     kernel_gray = clCreateKernel(program, "grayscale", &ret);
     kernel_blur = clCreateKernel(program, "blurbox", &ret);
 
     // Create memory buffers on the device for each matrix
-    inbuf = clCreateBuffer(context, CL_MEM_READ_ONLY, image_size * 3 * sizeof(unsigned char), NULL, NULL);
+    inbuf = clCreateBuffer(context, CL_MEM_READ_ONLY, image_size * 4 * sizeof(unsigned char), NULL, NULL);
     tempbuf = clCreateBuffer(context, CL_MEM_READ_WRITE, image_size * sizeof(unsigned char), NULL, NULL);
     outbuf = clCreateBuffer(context, CL_MEM_WRITE_ONLY, image_size * sizeof(unsigned char), NULL, NULL);
 
     // Copy Buffers to the device
     ret = clEnqueueWriteBuffer(command_queue, inbuf, CL_TRUE, 0,
-                                   image_size * 3 * sizeof(unsigned char), image, 0, NULL, NULL);
+                                   image_size * 4 * sizeof(unsigned char), image, 0, NULL, NULL);
+   printf("%d\n", ret); //4
 
 
     // Set the arguments of the kernel
     ret = clSetKernelArg(kernel_gray, 0, sizeof(cl_mem), &inbuf);
+    printf("%d\n", ret);
+
     ret = clSetKernelArg(kernel_gray, 1, sizeof(cl_mem), &tempbuf);
-    ret = clSetKernelArg(kernel_gray, 2, sizeof(unsigned), &width);
-    ret = clSetKernelArg(kernel_gray, 3, sizeof(unsigned), &height);
+    printf("%d\n", ret);
+
+/*    ret = clSetKernelArg(kernel_gray, 2, sizeof(unsigned), &width);
+    ret = clSetKernelArg(kernel_gray, 3, sizeof(unsigned), &height);*/
 
 
     // Execute the OpenCL kernel on the list
@@ -119,11 +144,15 @@ int main() {
     globalSize = ceil(image_size/(float)localSize)*localSize;
     ret = clEnqueueNDRangeKernel(command_queue, kernel_gray, 1, NULL, &globalSize, &localSize,
                                                               0, NULL, NULL);
+                                                              printf("%d\n", ret);
+
 
 
     // Read the cl memory C_clmem on device to the host variable C
     ret = clEnqueueReadBuffer(command_queue, tempbuf, CL_TRUE, 0,
                               image_size * sizeof(unsigned char), final_image, 0, NULL, NULL );
+                              printf("%d\n", ret);
+
 
 
 /*    // Set the arguments of the kernel
@@ -156,11 +185,15 @@ int main() {
     ret = clReleaseCommandQueue(command_queue);
     ret = clReleaseContext(context);
 
+    /*int i, j;
+    for(i=0; i<100; i++) {
+          printf("%d\n", final_image[i]);
+    }*/
 
 
     //Encode
-    error = lodepng_encode32_file(out_filename, final_image, width, height);
-    //error = lodepng_encode_file(out_filename, final_image, width, height, LCT_GREY, bitdepth);
+    //error = lodepng_encode32_file(out_filename, final_image, width, height);
+    error = lodepng_encode_file(out_filename, final_image, width, height, LCT_GREY, bitdepth);
     if(error) printf("error %u: %s\n", error, lodepng_error_text(error));
 
     free(image);
