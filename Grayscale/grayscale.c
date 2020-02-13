@@ -12,23 +12,24 @@
 #define MAX_SOURCE_SIZE (0x100000)
 
 int main(int argc, const char * argv[]) {
+
     // VARIABLES
-    
     cl_int error;
     cl_platform_id platform;
     cl_device_id device;
     cl_context context;
     cl_command_queue queue;
     cl_program program;
-    cl_kernel kernel;
+    cl_kernel kernel_gray;
+    cl_kernel kernel_blur;
 
-    const char* filename = "test.png";
-    const char* out_filename = "testi.png";
+    const char* filename = "lena.png";
+    const char* out_filename = "grayblurlena.png";
 
     unsigned char* image = 0;
     unsigned width, height;
     unsigned bitdepth = 8;
-    lodepng_decode32_file(&image, &width, &height, filename);
+    error = lodepng_decode32_file(&image, &width, &height, filename);
     const size_t INPUT_SIZE = width * height;
     
     // Initializa the ouput array
@@ -69,10 +70,14 @@ int main(int argc, const char * argv[]) {
     error = clBuildProgram(program, 1, &device, NULL, NULL, NULL);
     
     // Create the OpenCL kernel
-    kernel = clCreateKernel(program, "grayscale", &error);
+    kernel_gray = clCreateKernel(program, "grayscale", &error);
+    kernel_blur = clCreateKernel(program, "blur", &error);
 
-    // Create the input buffers
+    // Create the input buffer
     cl_mem inbuff = clCreateBuffer(context, CL_MEM_READ_ONLY, 4*INPUT_SIZE * sizeof(unsigned char), NULL, NULL);
+
+    // Create the temp buffers
+    cl_mem tempbuff = clCreateBuffer(context, CL_MEM_READ_ONLY, INPUT_SIZE * sizeof(unsigned char), NULL, NULL);
     
     // Create the output buffer
     cl_mem outbuff = clCreateBuffer(context, CL_MEM_READ_WRITE, INPUT_SIZE * sizeof(unsigned char), NULL, NULL);
@@ -81,14 +86,23 @@ int main(int argc, const char * argv[]) {
     error = clEnqueueWriteBuffer(queue, inbuff, CL_TRUE, 0, 4*INPUT_SIZE * sizeof(unsigned char), image, 0, NULL, NULL);
     
     // Set the kernel's parameters
-    error = clSetKernelArg(kernel, 0, sizeof(cl_mem), &inbuff);
-    error = clSetKernelArg(kernel, 1, sizeof(cl_mem), &outbuff);
+    error = clSetKernelArg(kernel_gray, 0, sizeof(cl_mem), &inbuff);
+    error = clSetKernelArg(kernel_gray, 1, sizeof(cl_mem), &tempbuff);
     
-    // Execute the OpenCL kernel
+    // Execute the OpenCL kernel grayscale
     size_t globalSize, localSize;
     localSize = 64;
     globalSize = ceil(INPUT_SIZE/(float)localSize)*localSize;
-    error = clEnqueueNDRangeKernel(queue, kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
+    error = clEnqueueNDRangeKernel(queue, kernel_gray, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
+
+    // Set Kernel Arguments for blur		
+    error = clSetKernelArg(kernel_blur, 0, sizeof(cl_mem), (void *)&tempbuff);		
+    error = clSetKernelArg(kernel_blur, 1, sizeof(cl_mem), (void *)&outbuff);		
+    error = clSetKernelArg(kernel_blur, 2, sizeof(int), (void *)&width);		
+    error = clSetKernelArg(kernel_blur, 3, sizeof(int), (void *)&height);
+
+    // Execute the OpenCL kernel
+    error = clEnqueueNDRangeKernel(queue, kernel_blur, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
     
     // Wait for the command queue to be finished
     error = clFinish(queue);
@@ -101,11 +115,17 @@ int main(int argc, const char * argv[]) {
     if(error) printf("error %u: %s\n", error, lodepng_error_text(error));
     
     // Free the resources
-    error = clReleaseKernel(kernel);
+    error = clReleaseKernel(kernel_gray);
+    error = clReleaseKernel(kernel_blur);
     error = clReleaseProgram(program);
+    error = clReleaseMemObject(inbuff);
+    error = clReleaseMemObject(tempbuff);
     error = clReleaseMemObject(outbuff);
     error = clReleaseCommandQueue(queue);
     error = clReleaseContext(context);
+
+    free(image);
+    free(output_image);
     
     return 0;
 }
