@@ -1,7 +1,3 @@
-//http://harmanani.github.io/classes/csc447/Notes/Lecture16.pdf
-//https://riptutorial.com/opencl/example/31177/grayscale-kernel
-//https://us.fixstars.com/products/opencl/book/OpenCLProgrammingBook/opencl-programming-practice/
-
 //Compilation: gcc -I /opt/intel/system_studio_2020/opencl-sdk/include -L /opt/intel/system_studio_2020/opencl-sdk/lib64 -o grayblur grayscaleblur.c lodepng.c -Wl,-rpath,/opt/intel/system_studio_2020/opencl-sdk/lib64 -lOpenCL -lm -Wall
 
 #ifdef MAC
@@ -15,7 +11,6 @@
 #include <stdlib.h>
 #include <math.h>
 
-
 #define MAX_SOURCE_SIZE (0x100000)
 
 int main() {
@@ -28,36 +23,17 @@ int main() {
 
     //Decode
     unsigned error = lodepng_decode32_file(&image, &width, &height, filename);
-    //unsigned error = lodepng_decode_file(&image, &width, &height, filename, LCT_RGB, bitdepth);
     if(error) printf("error %u: %s\n", error, lodepng_error_text(error));
-
-    /*generate some image*/
-    /*unsigned width = 512, height = 512;
-    unsigned char* image = malloc(width * height * 4);
-    unsigned x, y;
-    for(y = 0; y < height; y++)
-    for(x = 0; x < width; x++) {
-      image[4 * width * y + 4 * x + 0] = 145;
-      image[4 * width * y + 4 * x + 1] = 0;
-      image[4 * width * y + 4 * x + 2] = 0;
-      image[4 * width * y + 4 * x + 3] = 128;
-  }*/
 
     //Calculate image size
     unsigned image_size = width * height;
-    int blur_size = 2;
+    unsigned blur_size = 2;
 
     //Init pointers
-//    unsigned char* temp_image;
     unsigned char* final_image;
-
-    //temp_image = (unsigned char*)malloc(image_size * sizeof(unsigned char));
     final_image = (unsigned char*)malloc(image_size * sizeof(unsigned char));
 
-/*    for(int c=1000; c<2000; c++) {
-          printf("%d\n", image[c]);
-    }
-*/
+
     cl_device_id device_id = NULL;
     cl_context context = NULL;
     cl_command_queue command_queue = NULL;
@@ -90,7 +66,6 @@ int main() {
     source_size = fread(source_str, 1, MAX_SOURCE_SIZE, fp);
     fclose(fp);
 
-
     // Get Platform and Device Info
     ret = clGetPlatformIDs(1, &platform_id, &ret_num_platforms);
     printf("%d\n", ret); //1
@@ -99,7 +74,6 @@ int main() {
 
     // Create OpenCL context
     context = clCreateContext(NULL, 1, &device_id, NULL, NULL, &ret);
-
 
     // Create Command Queue
     command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
@@ -124,18 +98,14 @@ int main() {
     // Copy Buffers to the device
     ret = clEnqueueWriteBuffer(command_queue, inbuf, CL_TRUE, 0,
                                    image_size * 4 * sizeof(unsigned char), image, 0, NULL, NULL);
-   printf("%d\n", ret); //4
+    printf("%d\n", ret); //4
 
 
     // Set the arguments of the kernel
     ret = clSetKernelArg(kernel_gray, 0, sizeof(cl_mem), &inbuf);
-    printf("%d\n", ret);
-
+    printf("%d\n", ret); //5
     ret = clSetKernelArg(kernel_gray, 1, sizeof(cl_mem), &tempbuf);
-    printf("%d\n", ret);
-
-/*    ret = clSetKernelArg(kernel_gray, 2, sizeof(unsigned), &width);
-    ret = clSetKernelArg(kernel_gray, 3, sizeof(unsigned), &height);*/
+    printf("%d\n", ret);//6
 
 
     // Execute the OpenCL kernel on the list
@@ -144,32 +114,30 @@ int main() {
     globalSize = ceil(image_size/(float)localSize)*localSize;
     ret = clEnqueueNDRangeKernel(command_queue, kernel_gray, 1, NULL, &globalSize, &localSize,
                                                               0, NULL, NULL);
-                                                              printf("%d\n", ret);
+    printf("%d\n", ret); //7
 
 
 
-    // Read the cl memory C_clmem on device to the host variable C
-    ret = clEnqueueReadBuffer(command_queue, tempbuf, CL_TRUE, 0,
-                              image_size * sizeof(unsigned char), final_image, 0, NULL, NULL );
-                              printf("%d\n", ret);
-
-
-
-/*    // Set the arguments of the kernel
+    // Set the arguments of the kernel
     ret = clSetKernelArg(kernel_blur, 0, sizeof(cl_mem), &tempbuf);
+    printf("%d\n", ret);//9
     ret = clSetKernelArg(kernel_blur, 1, sizeof(cl_mem), &outbuf);
+    printf("%d\n", ret);//10
     ret = clSetKernelArg(kernel_blur, 2, sizeof(unsigned), &width);
+    printf("%d\n", ret);//11
     ret = clSetKernelArg(kernel_blur, 3, sizeof(unsigned), &height);
-    ret = clSetKernelArg(kernel_blur, 3, sizeof(int), &blur_size);
+    printf("%d\n", ret);//12
+
 
     // Execute the OpenCL kernel on the list
     ret = clEnqueueNDRangeKernel(command_queue, kernel_blur, 1, NULL, &globalSize, &localSize,
-                                                            0, NULL, NULL);
+                                0, NULL, NULL);
+    printf("%d\n", ret);//13
 
     // Read the cl memory C_clmem on device to the host variable C
     ret = clEnqueueReadBuffer(command_queue, outbuf, CL_TRUE, 0,
-                  image_size * sizeof(unsigned char), final_image, 0, NULL, NULL );*/
-
+                  image_size * sizeof(unsigned char), final_image, 0, NULL, NULL );
+    printf("%d\n", ret);//14
 
     // Clean up and wait for all the comands to complete.
     ret = clFlush(command_queue);
@@ -185,14 +153,7 @@ int main() {
     ret = clReleaseCommandQueue(command_queue);
     ret = clReleaseContext(context);
 
-    /*int i, j;
-    for(i=0; i<100; i++) {
-          printf("%d\n", final_image[i]);
-    }*/
-
-
     //Encode
-    //error = lodepng_encode32_file(out_filename, final_image, width, height);
     error = lodepng_encode_file(out_filename, final_image, width, height, LCT_GREY, bitdepth);
     if(error) printf("error %u: %s\n", error, lodepng_error_text(error));
 
