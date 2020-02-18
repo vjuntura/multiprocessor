@@ -17,7 +17,7 @@ __kernel void blurbox(__global unsigned char* in, __global unsigned char* out,
     //Exclude borders
     if (n % w < 2 || n % w >= w - 2 || n < 2 * w ||
         n > w * h - 2 * w) {
-        out[n]  = in[n];
+        out[n] = in[n];
     }
     //Do box blur for all other pixels
     else {

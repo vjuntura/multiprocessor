@@ -9,11 +9,15 @@
 #include "lodepng.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <math.h>
 
 #define MAX_SOURCE_SIZE (0x100000)
 
 int main() {
+    //Measure execution time
+    clock_t total_begin = clock();
+
     const char* filename = "test.png";
     const char* out_filename = "testi.png";
 
@@ -27,7 +31,6 @@ int main() {
 
     //Calculate image size
     unsigned image_size = width * height;
-    unsigned blur_size = 2;
 
     //Init pointers
     unsigned char* final_image;
@@ -112,11 +115,17 @@ int main() {
     size_t globalSize, localSize;
     localSize = 64;
     globalSize = ceil(image_size/(float)localSize)*localSize;
+
+    //Measure execution time
+    clock_t gray_begin = clock();
+
     ret = clEnqueueNDRangeKernel(command_queue, kernel_gray, 1, NULL, &globalSize, &localSize,
                                                               0, NULL, NULL);
     printf("%d\n", ret); //7
 
-
+    //Calculate execution time
+    clock_t gray_end = clock();
+    double time_spent_gray = (double)(gray_end - gray_begin) / CLOCKS_PER_SEC;
 
     // Set the arguments of the kernel
     ret = clSetKernelArg(kernel_blur, 0, sizeof(cl_mem), &tempbuf);
@@ -128,11 +137,17 @@ int main() {
     ret = clSetKernelArg(kernel_blur, 3, sizeof(unsigned), &height);
     printf("%d\n", ret);//12
 
+    //Measure execution time
+    clock_t blur_begin = clock();
 
     // Execute the OpenCL kernel on the list
     ret = clEnqueueNDRangeKernel(command_queue, kernel_blur, 1, NULL, &globalSize, &localSize,
                                 0, NULL, NULL);
     printf("%d\n", ret);//13
+
+    //Calculate execution time
+    clock_t blur_end = clock();
+    double time_spent_blur = (double)(blur_end - blur_begin) / CLOCKS_PER_SEC;
 
     // Read the cl memory C_clmem on device to the host variable C
     ret = clEnqueueReadBuffer(command_queue, outbuf, CL_TRUE, 0,
@@ -159,5 +174,23 @@ int main() {
 
     free(image);
     free(final_image);
+
+    //Calculate execution time
+    clock_t total_end = clock();
+    double time_spent_total = (double)(total_end - total_begin) / CLOCKS_PER_SEC;
+
+    // Print device info
+    char* device_name;
+    size_t device_size;
+    clGetDeviceInfo(device_id, CL_DEVICE_NAME, 0, NULL, &device_size);
+    device_name = (char*) malloc(device_size);
+    clGetDeviceInfo(device_id, CL_DEVICE_NAME, device_size, device_name, NULL);
+    printf("Device: %s\n", device_name);
+    free(device_name);
+
+    //Print device execution times
+    printf("Total execution time: %f\n", time_spent_total);
+    printf("Grayscale kernel execution time: %f\n", time_spent_gray);
+    printf("Running average kernel execution time: %f\n", time_spent_blur);
 
 }
