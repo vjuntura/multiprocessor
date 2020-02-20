@@ -9,18 +9,24 @@
 void zncc(unsigned char* IL, unsigned char* IR,
           unsigned width, unsigned height,
           int Max_Disp, int Min_Disp,
-          unsigned char* DisparityMap){}
+          unsigned char* DisparityMap);
+
+void post_processing(unsigned char* IL, unsigned char* IR,
+                      unsigned width, unsigned height,
+                      int Max_Disp, unsigned size,
+                      unsigned char* result);
+
 
 int main(int argc, char *argv[]) {
 
-    // Read images 
+    // Read images
     const char* filenameL = "imageL.png";
     const char* filenameR = "imageR.png";
     const char* out_filename = "testi.png";
 
     unsigned char* IL = 0;
     unsigned char* IR = 0;
-    
+
     unsigned width1, height1, width2, height2;
     unsigned bitdepth = 8;
 
@@ -48,7 +54,7 @@ int main(int argc, char *argv[]) {
     DisparityMapR2L = (char*)malloc(size2*sizeof(unsigned char));
 
     // Calculate disparity maps with zncc
-    
+
     // Left to right
     zncc(IL, IR, width1, height1, Max_Disp, Max_Disp, DisparityMapL2R);
     // Right to left
@@ -70,14 +76,14 @@ void zncc(unsigned char* IL, unsigned char* IR,
     int ind_l, ind_r; // Indices of block values within the whole image
     int d; // Disparity value
     float cl, cr; // centered values of a pixel in the left and right images;
-    
+
     float lbmean, rbmean; // Blocks means for left and right images
     float lbstd, rbstd; // Left block std, Right block std
     float current_score; // Current ZNCC value
-    
+
     int best_d;
     float best_score;
-    
+
     for (i = 0; i < height; i++) {
         for (j = 0; j < width; j++) {
             // Searching for the best d for the current pixel
@@ -103,12 +109,12 @@ void zncc(unsigned char* IL, unsigned char* IR,
                 }
                 lbmean /= window_size;
                 rbmean /= window_size;
-                
+
                 // Calculating ZNCC for given value of d
                 lbstd = 0;
                 rbstd = 0;
                 current_score = 0;
-                
+
                 // Calculating the nomentaor and the standard deviations for the denominator
                 for (i_b = -windowY/2; i_b < windowY/2; i_b++) {
                     for (j_b = -windowX/2; j_b < windowX/2; j_b++) {
@@ -119,7 +125,7 @@ void zncc(unsigned char* IL, unsigned char* IR,
                         // Calculatiing indices of the block within the whole image
                         ind_l = (i+i_b)*width + (j+j_b);
                         ind_r = (i+i_b)*width + (j+j_b-d);
-                            
+
                         cl = IL[ind_l] - lbmean;
                         cr = IR[ind_r] - rbmean;
                         lbstd += cl*cl;
@@ -136,6 +142,31 @@ void zncc(unsigned char* IL, unsigned char* IR,
                 }
             }
             DisparityMap[i*width+j] = (int) abs(best_d); // Considering both Left to Right and Right to left disparities
-        } 
-    }       
+        }
+    }
+}
+
+void post_processing(unsigned char* IL, unsigned char* IR,
+                      unsigned width, unsigned height,
+                      int Max_Disp, unsigned size,
+                      unsigned char* result) {
+
+    int threshold = 12;
+    tempMap = (char*)malloc(size*sizeof(unsigned char));
+
+    int color_nearest = 0;
+
+    //TODO ei ehkä toimi, katso matlabista j-window
+    //Simplest form of neigherest neighbour
+    for (int i = 0; i < size; i++) {
+        if (abs(IL[i] - IR[i])< threshold) {
+            tempMap[i] = IL[i];
+            color_nearest = tempMap[i];
+        } else {
+            tempMap[i] = color_nearest;
+        }
+    }
+
+    //Blur image for better representation only
+    
 }
