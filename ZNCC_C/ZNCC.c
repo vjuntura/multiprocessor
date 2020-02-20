@@ -50,9 +50,11 @@ int main(int argc, char *argv[]) {
     // Disparity maps
     unsigned char* DisparityMapL2R;
     unsigned char* DisparityMapR2L;
+    unsigned char* result;
 
     DisparityMapL2R = (unsigned char*)malloc(size1*sizeof(unsigned char));
     DisparityMapR2L = (unsigned char*)malloc(size2*sizeof(unsigned char));
+    result = (unsigned char*)malloc(size1*sizeof(unsigned char));
 
     // Calculate disparity maps with zncc
 
@@ -61,10 +63,15 @@ int main(int argc, char *argv[]) {
     // Right to left
     zncc(IR, IL, width1, height1, max_disp, min_disp, DisparityMapR2L);
 
-    post_processing(unsigned char* IL, unsigned char* IR,
-                          unsigned width, unsigned height,
-                          int Max_Disp, unsigned size,
-                          unsigned char* result)
+    post_processing(DisparityMapL2R, DisparityMapR2L, width1, height1, max_disp, size1, result);
+
+    lodepng_encode_file(out_filename, result, width1, height1, LCT_GREY, bitdepth);
+
+    free(DisparityMapL2R);
+    free(DisparityMapR2L);
+    free(result);
+    free(IR);
+    free(IL);
 }
 
 void zncc(unsigned char* IL, unsigned char* IR,
@@ -88,6 +95,7 @@ void zncc(unsigned char* IL, unsigned char* IR,
     int best_disp;
     float currentMaximum;
 
+    printf("Doing calculations \n");
     for (i = 0; i < height; i++) {
         for (j = 0; j < width; j++) {
             // Search for the best dp_value
@@ -162,6 +170,7 @@ void post_processing(unsigned char* IL, unsigned char* IR,
 
     //TODO ei ehkä toimi, katso matlabista j-window
     //Simplest form of neigherest neighbour
+    printf("Post processing...\n");
     for (int i = 0; i < size; i++) {
         if (abs(IL[i] - IR[i])< threshold) {
             result[i] = IL[i];
