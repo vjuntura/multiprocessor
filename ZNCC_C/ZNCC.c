@@ -61,6 +61,10 @@ int main(int argc, char *argv[]) {
     // Right to left
     zncc(IR, IL, width1, height1, max_disp, min_disp, DisparityMapR2L);
 
+    post_processing(unsigned char* IL, unsigned char* IR,
+                          unsigned width, unsigned height,
+                          int Max_Disp, unsigned size,
+                          unsigned char* result)
 }
 
 void zncc(unsigned char* IL, unsigned char* IR,
@@ -152,7 +156,7 @@ void post_processing(unsigned char* IL, unsigned char* IR,
                       unsigned char* result) {
 
     int threshold = 12;
-    tempMap = (char*)malloc(size*sizeof(unsigned char));
+    //unsigned char* tempMap = (unsigned char*)malloc(size*sizeof(unsigned char));
 
     int color_nearest = 0;
 
@@ -160,10 +164,10 @@ void post_processing(unsigned char* IL, unsigned char* IR,
     //Simplest form of neigherest neighbour
     for (int i = 0; i < size; i++) {
         if (abs(IL[i] - IR[i])< threshold) {
-            tempMap[i] = IL[i];
-            color_nearest = tempMap[i];
+            result[i] = IL[i];
+            color_nearest = result[i];
         } else {
-            tempMap[i] = color_nearest;
+            result[i] = color_nearest;
         }
     }
 
