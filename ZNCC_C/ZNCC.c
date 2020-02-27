@@ -4,8 +4,8 @@
 #include <math.h>
 
 
-#define windowX 5
-#define windowY 5
+#define windowX 4
+#define windowY 4
 
 void zncc(unsigned char* IL, unsigned char* IR,
           unsigned width, unsigned height,
@@ -26,6 +26,8 @@ int main(int argc, char *argv[]) {
     const char* filenameR = "im1.png";
 
     const char* out_filename = "testi.png";
+    const char* dimage1out_filename = "dimage1.png";
+    const char* dimage2out_filename = "dimage2.png";
 
     unsigned char* IL = 0;
     unsigned char* IR = 0;
@@ -44,7 +46,7 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    int max_disp = 50;
+    int max_disp = 255;
     int min_disp = 0;
 
     // Disparity maps
@@ -60,8 +62,23 @@ int main(int argc, char *argv[]) {
 
     // Left to right
     zncc(IL, IR, width1, height1, max_disp, min_disp, DisparityMapL2R);
+    /*printf("Disparity left\n");
+    for(int i=0; i < width1; i++){
+        for(int j=0; j < height1; j++){
+            printf("%d\n", DisparityMapL2R[i*height1 + j]);
+        }
+    }*/
+
+    lodepng_encode_file(dimage1out_filename, DisparityMapL2R, width1, height1, LCT_GREY, bitdepth);
     // Right to left
     zncc(IR, IL, width1, height1, max_disp, min_disp, DisparityMapR2L);
+    /*printf("Disparity right\n");
+    for(int i=0; i < width2; i++){
+        for(int j=0; j < height2; j++){
+            printf("%d\n", DisparityMapR2L[i*height2 + j]);
+        }
+    }*/
+    lodepng_encode_file(dimage2out_filename, DisparityMapR2L, width1, height1, LCT_GREY, bitdepth);
 
     post_processing(DisparityMapL2R, DisparityMapR2L, width1, height1, max_disp, size1, result);
 
@@ -79,8 +96,58 @@ void zncc(unsigned char* IL, unsigned char* IR,
           int max_disp, int min_disp,
           unsigned char* DisparityMap)
 {
+
+    int sum_of_Left_win = 0;
+    int sum_of_Right_win = 0;
+    int Mean_win_L = 0;
+    int Mean_win_R = 0;
+    int Number_of_win_pixels = windowX * windowY;
+    int NominatorL2R = 0;
+    int Denominator1L2R = 0;
+    int Denominator2L2R = 0;
+    int ZNCC_VALUE_Left_to_Right = 0;
+    int CurrentMaximumL2R = -1;
+    int BestDisparityValueL2R = 0;
+
+    for (int j = 0; j < height; j++) {
+        for (int i = 0; i < width; i++) {
+            for (int d = 0; d < max_disp; d++) {
+                for (int Win_Y = 0; windowY < Win_Y; Win_Y++) {
+                    for (int Win_X = 0; Win_X < windowX; Win_X++) {
+                        //Calculate mean
+                        sum_of_Left_win = sum_of_Left_win + IL[i + Win_X, j + Win_Y + d];
+                        sum_of_Right_win = sum_of_Right_win + IR[i + Win_X, j + Win_Y];
+                    }
+                }
+
+                Mean_win_L = sum_of_Left_win / Number_of_win_pixels;
+                Mean_win_R = sum_of_Right_win / Number_of_win_pixels;
+
+                for (int Win_Y = 0; windowY < Win_Y; Win_Y++) {
+                    for (int Win_X = 0; Win_X < windowX; Win_X++) {
+                        //Calculate zncc
+                        NominatorL2R = NominatorL2R + (IL[i+Win_X,j+Win_Y+d]-Mean_win_L)*(IR[i+Win_X,j+Win_Y]-Mean_win_R);
+                        Denominator1L2R = Denominator1L2R + (IL[i+Win_X,j+Win_Y+d]-Mean_win_L)*(IL[i+Win_X,j+Win_Y+d]-Mean_win_L);
+                        Denominator2L2R = Denominator2L2R + (IR[i+Win_X,j+Win_Y]-Mean_win_R)*(IR[i+Win_X,j+Win_Y]-Mean_win_R);
+                    }
+                }
+
+                ZNCC_VALUE_Left_to_Right = NominatorL2R/(sqrt(Denominator1L2R*Denominator2L2R));
+
+                if (ZNCC_VALUE_Left_to_Right > CurrentMaximumL2R) {
+                    CurrentMaximumL2R=ZNCC_VALUE_Left_to_Right;
+                    BestDisparityValueL2R=d;
+                }
+            }
+            DisparityMap[i * width + j]=(unsigned char)abs(BestDisparityValueL2R);
+        }
+    }
+
+
+
+
     // Calculate disparity map
-    int window_size = windowX*windowY;
+/*    int window_size = windowX*windowY;
 
     int i, j;
     int i_b, j_b;
@@ -155,7 +222,7 @@ void zncc(unsigned char* IL, unsigned char* IR,
             }
             DisparityMap[i*width+j] = (int) abs(best_disp); // Considering both Left to Right and Right to left disparities
         }
-    }
+    }*/
 }
 
 void post_processing(unsigned char* IL, unsigned char* IR,
@@ -171,12 +238,23 @@ void post_processing(unsigned char* IL, unsigned char* IR,
     //TODO ei ehkä toimi, katso matlabista j-window
     //Simplest form of neigherest neighbour
     printf("Post processing...\n");
-    for (int i = 0; i < size; i++) {
-        if (abs(IL[i] - IR[i])< threshold) {
+/*    for (int i = 0; i < size; i++) {
+        if (abs(IL[i] - IR[i]) < threshold) {
             result[i] = IL[i];
             color_nearest = result[i];
         } else {
             result[i] = color_nearest;
+        }
+    }*/
+
+    for(int i=0; i < width; i++){
+        for(int j=0; j < height; j++){
+            if (abs(IL[i*height + j] - IR[i*height + j]) < threshold) {
+                result[i*height + j] = IL[i*height + j];
+                color_nearest = result[i*height + j];
+            } else {
+                result[i*height + j] = color_nearest;
+            }
         }
     }
 
