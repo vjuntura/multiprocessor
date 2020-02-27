@@ -1,11 +1,13 @@
+//2d array indexing: https://stackoverflow.com/questions/2151084/map-a-2d-array-onto-a-1d-array
+
 #include "lodepng.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 
 
-#define windowX 4
-#define windowY 4
+#define windowX 5
+#define windowY 5
 
 void zncc(unsigned char* IL, unsigned char* IR,
           unsigned width, unsigned height,
@@ -46,7 +48,7 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    int max_disp = 255;
+    int max_disp = 50;
     int min_disp = 0;
 
     // Disparity maps
@@ -105,41 +107,63 @@ void zncc(unsigned char* IL, unsigned char* IR,
     int NominatorL2R = 0;
     int Denominator1L2R = 0;
     int Denominator2L2R = 0;
-    int ZNCC_VALUE_Left_to_Right = 0;
+    double ZNCC_VALUE_Left_to_Right = 0;
     int CurrentMaximumL2R = -1;
     int BestDisparityValueL2R = 0;
 
-    for (int j = 0; j < height; j++) {
-        for (int i = 0; i < width; i++) {
+    // [width * row + col]
+    printf("Calculating...\n");
+    printf("w %d, h %d\n", width, height);
+    for (int i = 0; i < height - windowX; i++) {
+        //for (int i = 0; i < width; i++) {
+        for (int j = 0; j < width - windowY - max_disp; j++) {
+            CurrentMaximumL2R = -1;
             for (int d = 0; d < max_disp; d++) {
-                for (int Win_Y = 0; windowY < Win_Y; Win_Y++) {
-                    for (int Win_X = 0; Win_X < windowX; Win_X++) {
+                sum_of_Left_win = 0;
+                sum_of_Right_win = 0;
+            //for (int d = -max_disp; d < max_disp; d++) {
+                for (int Win_X = 0; Win_X < windowX; Win_X++) {
+                    for (int Win_Y = 0; Win_Y < windowY; Win_Y++) {
+
                         //Calculate mean
-                        sum_of_Left_win = sum_of_Left_win + IL[i + Win_X, j + Win_Y + d];
-                        sum_of_Right_win = sum_of_Right_win + IR[i + Win_X, j + Win_Y];
+                    /*    if (j == 385) {
+                            printf("sum %d\n", width * (j + Win_Y + d) + (i + Win_X));
+                        }*/
+                        sum_of_Left_win = sum_of_Left_win + IL[width * (i + Win_X) + (j + Win_Y + d)];//[i + Win_X, j + Win_Y + d];
+                        sum_of_Right_win = sum_of_Right_win + IR[width * (i + Win_X) + (j + Win_Y)];//[i + Win_X, j + Win_Y];
+                        //printf("asd %d\n", IL[width * (j + Win_Y + d) + (i + Win_X)]);
                     }
                 }
 
                 Mean_win_L = sum_of_Left_win / Number_of_win_pixels;
                 Mean_win_R = sum_of_Right_win / Number_of_win_pixels;
 
-                for (int Win_Y = 0; windowY < Win_Y; Win_Y++) {
-                    for (int Win_X = 0; Win_X < windowX; Win_X++) {
+                //printf("suml %d, sumr %d\n", sum_of_Left_win, sum_of_Right_win);
+                NominatorL2R = 0;
+                Denominator1L2R = 0;
+                Denominator2L2R = 0;
+                //printf("before\n");
+                for (int Win_X = 0; Win_X < windowX; Win_X++) {
+                    for (int Win_Y = 0; Win_Y < windowY; Win_Y++) {
+
                         //Calculate zncc
-                        NominatorL2R = NominatorL2R + (IL[i+Win_X,j+Win_Y+d]-Mean_win_L)*(IR[i+Win_X,j+Win_Y]-Mean_win_R);
-                        Denominator1L2R = Denominator1L2R + (IL[i+Win_X,j+Win_Y+d]-Mean_win_L)*(IL[i+Win_X,j+Win_Y+d]-Mean_win_L);
-                        Denominator2L2R = Denominator2L2R + (IR[i+Win_X,j+Win_Y]-Mean_win_R)*(IR[i+Win_X,j+Win_Y]-Mean_win_R);
+                        NominatorL2R = NominatorL2R + (IL[width * (i + Win_X) + (j + Win_Y + d)] - Mean_win_L) * (IR[width * (i + Win_X) + (j + Win_Y)] - Mean_win_R); //(IL[i+Win_X,j+Win_Y+d] - Mean_win_L) * (IR[i+Win_X,j+Win_Y]-Mean_win_R);
+                        Denominator1L2R = Denominator1L2R + (IL[width * (i + Win_X) + (j + Win_Y + d)] - Mean_win_L) * (IL[width * (i + Win_X) + (j + Win_Y + d)] - Mean_win_L);//(IL[i+Win_X,j+Win_Y+d] - Mean_win_L)*(IL[i+Win_X,j+Win_Y+d]-Mean_win_L);
+                        Denominator2L2R = Denominator2L2R + (IR[width * (i + Win_X) + (j + Win_Y)] - Mean_win_R) * (IR[width * (i + Win_X) + (j + Win_Y)] - Mean_win_R);//(IR[i+Win_X,j+Win_Y] - Mean_win_R)*(IR[i+Win_X,j+Win_Y]-Mean_win_R);
                     }
                 }
+                //printf("after\n");
 
-                ZNCC_VALUE_Left_to_Right = NominatorL2R/(sqrt(Denominator1L2R*Denominator2L2R));
-
-                if (ZNCC_VALUE_Left_to_Right > CurrentMaximumL2R) {
-                    CurrentMaximumL2R=ZNCC_VALUE_Left_to_Right;
-                    BestDisparityValueL2R=d;
+                //printf("dem1 %d, dem2 %d, nom %d\n", Denominator1L2R, Denominator2L2R, NominatorL2R );
+                ZNCC_VALUE_Left_to_Right = (double) (NominatorL2R) / (sqrt((double) (Denominator1L2R*Denominator2L2R)));
+                            //printf("%d\n", ZNCC_VALUE_Left_to_Right);
+                if ((int)ZNCC_VALUE_Left_to_Right > CurrentMaximumL2R) {
+                    //printf("here\n");
+                    CurrentMaximumL2R = (int) ZNCC_VALUE_Left_to_Right;
+                    BestDisparityValueL2R = d;
                 }
             }
-            DisparityMap[i * width + j]=(unsigned char)abs(BestDisparityValueL2R);
+            DisparityMap[width * i + j] = (unsigned char) abs(BestDisparityValueL2R);
         }
     }
 
@@ -247,13 +271,14 @@ void post_processing(unsigned char* IL, unsigned char* IR,
         }
     }*/
 
-    for(int i=0; i < width; i++){
-        for(int j=0; j < height; j++){
-            if (abs(IL[i*height + j] - IR[i*height + j]) < threshold) {
-                result[i*height + j] = IL[i*height + j];
-                color_nearest = result[i*height + j];
+    for(int i=0; i < height; i++){
+        color_nearest = 0;
+        for(int j=0; j < width; j++){
+            if (abs(IL[i*width + j] - IR[i*width + j]) < threshold) {
+                result[i*width + j] = IL[i*width + j];
+                color_nearest = result[i*width + j];
             } else {
-                result[i*height + j] = color_nearest;
+                result[i*width + j] = color_nearest;
             }
         }
     }
