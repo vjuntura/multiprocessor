@@ -1,13 +1,19 @@
 //2d array indexing: https://stackoverflow.com/questions/2151084/map-a-2d-array-onto-a-1d-array
 
+//Compilation: gcc ZNCC.c lodepng.c -Wall -o paska -lm
+
 #include "lodepng.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <limits.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <time.h>
 
 
-#define windowX 5
-#define windowY 5
+#define windowX 21
+#define windowY 15
 
 void zncc(unsigned char* IL, unsigned char* IR,
           unsigned width, unsigned height,
@@ -20,6 +26,9 @@ void post_processing(unsigned char* IL, unsigned char* IR,
                       int Max_Disp, unsigned size,
                       unsigned char* result);
 
+void convertgray(const uint8_t* imageL, const uint8_t* imageR,
+                uint8_t* resizedL, uint8_t* resizedR, uint32_t w, uint32_t h);
+
 
 int main(int argc, char *argv[]) {
 
@@ -31,15 +40,19 @@ int main(int argc, char *argv[]) {
     const char* dimage1out_filename = "dimage1.png";
     const char* dimage2out_filename = "dimage2.png";
 
-    unsigned char* IL = 0;
-    unsigned char* IR = 0;
+    uint8_t* original_IL = 0;
+    uint8_t* original_IR = 0;
 
-    unsigned width1, height1, width2, height2;
+    uint8_t* gray_IL = 0;
+    uint8_t* gray_IR = 0;
+
+
+    uint32_t width1, height1, width2, height2;
     unsigned bitdepth = 8;
 
     //Decode
-    lodepng_decode_file(&IL, &width1, &height1, filenameL, LCT_GREY, bitdepth);
-    lodepng_decode_file(&IR, &width2, &height2, filenameR, LCT_GREY, bitdepth);
+    lodepng_decode32_file(&original_IL, &width1, &height1, filenameL);//, LCT_GREY, bitdepth);
+    lodepng_decode32_file(&original_IR, &width2, &height2, filenameR);//, LCT_GREY, bitdepth);
     unsigned size1 = width1*height1;
     unsigned size2 = width2*height2;
 
@@ -48,22 +61,33 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    int max_disp = 50;
+    int max_disp = 64;
     int min_disp = 0;
 
-    // Disparity maps
-    unsigned char* DisparityMapL2R;
-    unsigned char* DisparityMapR2L;
-    unsigned char* result;
+    //New sizes after rescaling
+    uint32_t size = (width1 / 4) * (height1 / 4);
+    uint32_t width = width1 / 4;
+    uint32_t height = height1 / 4;
 
-    DisparityMapL2R = (unsigned char*)malloc(size1*sizeof(unsigned char));
-    DisparityMapR2L = (unsigned char*)malloc(size2*sizeof(unsigned char));
-    result = (unsigned char*)malloc(size1*sizeof(unsigned char));
+    gray_IL = (uint8_t*)malloc(size * sizeof(uint8_t));
+    gray_IR = (uint8_t*)malloc(size * sizeof(uint8_t));
+
+    //Convert to grayscale
+    convertgray(original_IL, original_IR, gray_IL, gray_IR, width1, height1);
+
+    // Disparity maps
+    uint8_t* DisparityMapL2R;
+    uint8_t* DisparityMapR2L;
+    uint8_t* result;
+
+    DisparityMapL2R = (uint8_t*)malloc(size * sizeof(uint8_t));
+    DisparityMapR2L = (uint8_t*)malloc(size * sizeof(uint8_t));
+    result = (uint8_t*)malloc(size * sizeof(uint8_t));
 
     // Calculate disparity maps with zncc
 
     // Left to right
-    zncc(IL, IR, width1, height1, max_disp, min_disp, DisparityMapL2R);
+    zncc(gray_IL, gray_IR, width, height, max_disp, min_disp, DisparityMapL2R);
     /*printf("Disparity left\n");
     for(int i=0; i < width1; i++){
         for(int j=0; j < height1; j++){
@@ -71,99 +95,176 @@ int main(int argc, char *argv[]) {
         }
     }*/
 
-    lodepng_encode_file(dimage1out_filename, DisparityMapL2R, width1, height1, LCT_GREY, bitdepth);
+    lodepng_encode_file(dimage1out_filename, DisparityMapL2R, width, height, LCT_GREY, bitdepth);
     // Right to left
-    zncc(IR, IL, width1, height1, max_disp, min_disp, DisparityMapR2L);
+    zncc(gray_IR, gray_IL, width, height, min_disp, -max_disp, DisparityMapR2L);
     /*printf("Disparity right\n");
     for(int i=0; i < width2; i++){
         for(int j=0; j < height2; j++){
             printf("%d\n", DisparityMapR2L[i*height2 + j]);
         }
     }*/
-    lodepng_encode_file(dimage2out_filename, DisparityMapR2L, width1, height1, LCT_GREY, bitdepth);
+    lodepng_encode_file(dimage2out_filename, DisparityMapR2L, width, height, LCT_GREY, bitdepth);
 
-    post_processing(DisparityMapL2R, DisparityMapR2L, width1, height1, max_disp, size1, result);
+    post_processing(DisparityMapL2R, DisparityMapR2L, width, height, max_disp, size, result);
 
-    lodepng_encode_file(out_filename, result, width1, height1, LCT_GREY, bitdepth);
+    lodepng_encode_file(out_filename, result, width, height, LCT_GREY, bitdepth);
 
     free(DisparityMapL2R);
     free(DisparityMapR2L);
     free(result);
-    free(IR);
-    free(IL);
+    free(original_IL);
+    free(original_IR);
+    free(gray_IL);
+    free(gray_IR);
 }
 
-void zncc(unsigned char* IL, unsigned char* IR,
-          unsigned width, unsigned height,
+void zncc(uint8_t* IL, uint8_t* IR,
+          uint32_t width, uint32_t height,
           int max_disp, int min_disp,
-          unsigned char* DisparityMap)
+          uint8_t* DisparityMap)
 {
 
-    int sum_of_Left_win = 0;
-    int sum_of_Right_win = 0;
-    int Mean_win_L = 0;
-    int Mean_win_R = 0;
+    float sum_of_Left_win = 0;
+    float sum_of_Right_win = 0;
+    float Mean_win_L = 0;
+    float Mean_win_R = 0;
     int Number_of_win_pixels = windowX * windowY;
-    int NominatorL2R = 0;
-    int Denominator1L2R = 0;
-    int Denominator2L2R = 0;
-    double ZNCC_VALUE_Left_to_Right = 0;
-    int CurrentMaximumL2R = -1;
-    int BestDisparityValueL2R = 0;
+    float Nominator = 0;
+    float Denominator1 = 0;
+    float Denominator2 = 0;
+    //float ZNCC_VALUE_Left_to_Right = 0;
+    float CurrentMaximum = -1;
+    int BestDisparityValue = 0;
 
     // [width * row + col]
     printf("Calculating...\n");
     printf("w %d, h %d\n", width, height);
-    for (int i = 0; i < height - windowX; i++) {
-        //for (int i = 0; i < width; i++) {
-        for (int j = 0; j < width - windowY - max_disp; j++) {
-            CurrentMaximumL2R = -1;
-            for (int d = 0; d < max_disp; d++) {
+
+
+    for (int i = 0; i < height; i++) {
+        for (int j = 0; j < width; j++) {
+            CurrentMaximum = -1;
+            BestDisparityValue = max_disp;
+            for (int d = min_disp; d <= max_disp; d++) {
                 sum_of_Left_win = 0;
                 sum_of_Right_win = 0;
-            //for (int d = -max_disp; d < max_disp; d++) {
-                for (int Win_X = 0; Win_X < windowX; Win_X++) {
-                    for (int Win_Y = 0; Win_Y < windowY; Win_Y++) {
+
+
+                for (int Win_Y = -windowY/2; Win_Y < windowY/2; Win_Y++) {
+                    for (int Win_X = -windowX/2; Win_X < windowX/2; Win_X++) {
+
+                        // Exclude borders
+                        if (!(i + Win_X >= 0) || !(i + Win_X < height) ||
+                            !(j + Win_Y >= 0) || !(j + Win_Y < width) ||
+                            !(j + Win_Y - d  >= 0) || !(j + Win_Y - d < width)) {
+                            continue;
+                        }
+
+                        int row = width * (i + Win_X);
+                        int col = j + Win_Y;
 
                         //Calculate mean
-                    /*    if (j == 385) {
-                            printf("sum %d\n", width * (j + Win_Y + d) + (i + Win_X));
-                        }*/
-                        sum_of_Left_win = sum_of_Left_win + IL[width * (i + Win_X) + (j + Win_Y + d)];//[i + Win_X, j + Win_Y + d];
-                        sum_of_Right_win = sum_of_Right_win + IR[width * (i + Win_X) + (j + Win_Y)];//[i + Win_X, j + Win_Y];
-                        //printf("asd %d\n", IL[width * (j + Win_Y + d) + (i + Win_X)]);
+                        sum_of_Left_win += IL[row + col];
+                        sum_of_Right_win += IR[row + (col - d)];
                     }
                 }
+
 
                 Mean_win_L = sum_of_Left_win / Number_of_win_pixels;
                 Mean_win_R = sum_of_Right_win / Number_of_win_pixels;
 
-                //printf("suml %d, sumr %d\n", sum_of_Left_win, sum_of_Right_win);
-                NominatorL2R = 0;
-                Denominator1L2R = 0;
-                Denominator2L2R = 0;
-                //printf("before\n");
-                for (int Win_X = 0; Win_X < windowX; Win_X++) {
-                    for (int Win_Y = 0; Win_Y < windowY; Win_Y++) {
+                Nominator = 0;
+                Denominator1 = 0;
+                Denominator2 = 0;
 
+                //printf("before\n");
+                for (int Win_Y = -windowY/2; Win_Y < windowY/2; Win_Y++) {
+                    for (int Win_X = -windowX/2; Win_X < windowX/2; Win_X++) {
+
+                        // Exclude borders
+                        if (!(i + Win_X >= 0) || !(i + Win_X < height) ||
+                            !(j + Win_Y >= 0) || !(j + Win_Y < width) ||
+                            !(j + Win_Y - d  >= 0) || !(j + Win_Y - d < width)) {
+                            continue;
+                        }
+                        
                         //Calculate zncc
-                        NominatorL2R = NominatorL2R + (IL[width * (i + Win_X) + (j + Win_Y + d)] - Mean_win_L) * (IR[width * (i + Win_X) + (j + Win_Y)] - Mean_win_R); //(IL[i+Win_X,j+Win_Y+d] - Mean_win_L) * (IR[i+Win_X,j+Win_Y]-Mean_win_R);
-                        Denominator1L2R = Denominator1L2R + (IL[width * (i + Win_X) + (j + Win_Y + d)] - Mean_win_L) * (IL[width * (i + Win_X) + (j + Win_Y + d)] - Mean_win_L);//(IL[i+Win_X,j+Win_Y+d] - Mean_win_L)*(IL[i+Win_X,j+Win_Y+d]-Mean_win_L);
-                        Denominator2L2R = Denominator2L2R + (IR[width * (i + Win_X) + (j + Win_Y)] - Mean_win_R) * (IR[width * (i + Win_X) + (j + Win_Y)] - Mean_win_R);//(IR[i+Win_X,j+Win_Y] - Mean_win_R)*(IR[i+Win_X,j+Win_Y]-Mean_win_R);
+                        int row = width * (i + Win_X);
+                        int col = j + Win_Y;
+
+                        int tempL = row + col;
+                        int tempR = row + (col -d);
+
+                        int centerL = IL[tempL] - Mean_win_L;
+                        int centerR = IR[tempR] - Mean_win_R;
+
+                        Denominator1 += centerL*centerL;
+                        Denominator2 += centerR*centerR;
+                        Nominator += centerL*centerR;
                     }
                 }
+
+
+
+    // for (int i = 0; i < height - windowX; i++) {
+    //     //for (int i = 0; i < width; i++) {
+    //     for (int j = 0; j < width - windowY - max_disp; j++) {
+    //         CurrentMaximumL2R = -1;
+    //         for (int d = 0; d < max_disp; d++) {
+    //             sum_of_Left_win = 0;
+    //             sum_of_Right_win = 0;
+    //         //for (int d = -max_disp; d < max_disp; d++) {
+    //             for (int Win_X = 0; Win_X < windowX; Win_X++) {
+    //                 for (int Win_Y = 0; Win_Y < windowY; Win_Y++) {
+    //
+    //                     //Calculate mean
+    //                 /*    if (j == 385) {
+    //                         printf("sum %d\n", width * (j + Win_Y + d) + (i + Win_X));
+    //                     }*/
+    //                     sum_of_Left_win = sum_of_Left_win + IL[width * (i + Win_X) + (j + Win_Y + d)];//[i + Win_X, j + Win_Y + d];
+    //                     sum_of_Right_win = sum_of_Right_win + IR[width * (i + Win_X) + (j + Win_Y)];//[i + Win_X, j + Win_Y];
+    //                     //printf("asd %d\n", IL[width * (j + Win_Y + d) + (i + Win_X)]);
+    //                 }
+    //             }
+    //
+    //             Mean_win_L = sum_of_Left_win / Number_of_win_pixels;
+    //             Mean_win_R = sum_of_Right_win / Number_of_win_pixels;
+    //
+    //             //printf("suml %d, sumr %d\n", sum_of_Left_win, sum_of_Right_win);
+    //             NominatorL2R = 0;
+    //             Denominator1L2R = 0;
+    //             Denominator2L2R = 0;
+    //             //printf("before\n");
+    //             for (int Win_X = 0; Win_X < windowX; Win_X++) {
+    //                 for (int Win_Y = 0; Win_Y < windowY; Win_Y++) {
+    //
+    //                     //Calculate zncc
+    //                     NominatorL2R = NominatorL2R + (IL[width * (i + Win_X) + (j + Win_Y + d)] - Mean_win_L) * (IR[width * (i + Win_X) + (j + Win_Y)] - Mean_win_R); //(IL[i+Win_X,j+Win_Y+d] - Mean_win_L) * (IR[i+Win_X,j+Win_Y]-Mean_win_R);
+    //                     Denominator1L2R = Denominator1L2R + (IL[width * (i + Win_X) + (j + Win_Y + d)] - Mean_win_L) * (IL[width * (i + Win_X) + (j + Win_Y + d)] - Mean_win_L);//(IL[i+Win_X,j+Win_Y+d] - Mean_win_L)*(IL[i+Win_X,j+Win_Y+d]-Mean_win_L);
+    //                     Denominator2L2R = Denominator2L2R + (IR[width * (i + Win_X) + (j + Win_Y)] - Mean_win_R) * (IR[width * (i + Win_X) + (j + Win_Y)] - Mean_win_R);//(IR[i+Win_X,j+Win_Y] - Mean_win_R)*(IR[i+Win_X,j+Win_Y]-Mean_win_R);
+    //                 }
+    //             }
                 //printf("after\n");
 
                 //printf("dem1 %d, dem2 %d, nom %d\n", Denominator1L2R, Denominator2L2R, NominatorL2R );
-                ZNCC_VALUE_Left_to_Right = (double) (NominatorL2R) / (sqrt((double) (Denominator1L2R*Denominator2L2R)));
+                //ZNCC_VALUE_Left_to_Right = NominatorL2R / (Denominator1L2R * Denominator2L2R);
+                Nominator /= sqrt(Denominator1) * sqrt(Denominator2);
                             //printf("%d\n", ZNCC_VALUE_Left_to_Right);
-                if ((int)ZNCC_VALUE_Left_to_Right > CurrentMaximumL2R) {
+            /*    if (ZNCC_VALUE_Left_to_Right > CurrentMaximumL2R) {
                     //printf("here\n");
-                    CurrentMaximumL2R = (int) ZNCC_VALUE_Left_to_Right;
+                    CurrentMaximumL2R = ZNCC_VALUE_Left_to_Right;
                     BestDisparityValueL2R = d;
+                }*/
+
+                if (Nominator > CurrentMaximum) {
+                    //printf("here\n");
+                    CurrentMaximum = Nominator;
+                    BestDisparityValue = d;
                 }
+
             }
-            DisparityMap[width * i + j] = (unsigned char) abs(BestDisparityValueL2R);
+            DisparityMap[width * i + j] = (uint8_t) abs(BestDisparityValue);
         }
     }
 
@@ -249,10 +350,10 @@ void zncc(unsigned char* IL, unsigned char* IR,
     }*/
 }
 
-void post_processing(unsigned char* IL, unsigned char* IR,
-                      unsigned width, unsigned height,
-                      int Max_Disp, unsigned size,
-                      unsigned char* result) {
+void post_processing(uint8_t* IL, uint8_t* IR,
+                      uint32_t width, uint32_t height,
+                      int Max_Disp, uint32_t size,
+                      uint8_t* result) {
 
     int threshold = 12;
     //unsigned char* tempMap = (unsigned char*)malloc(size*sizeof(unsigned char));
@@ -285,4 +386,25 @@ void post_processing(unsigned char* IL, unsigned char* IR,
 
     //Blur image for better representation only
 
+}
+
+void convertgray(const uint8_t* imageL, const uint8_t* imageR, uint8_t* resizedL, uint8_t* resizedR, uint32_t w, uint32_t h)
+{
+    /* Downscaling and conversion to 8bit grayscale image */
+
+	int32_t i, j; // Indices of the resized image
+    int32_t new_w=w/4, new_h=h/4; //  Width and height of the downscaled image
+    int32_t orig_i, orig_j; // Indices of the original image
+
+    // Iterating through the pixels of the downscaled image
+	for (i = 0; i < new_h; i++) {
+	    for (j = 0; j < new_w; j++) {
+	        // Calculating corresponding indices in the original image
+	        orig_i = (4*i-1*(i > 0));
+	        orig_j = (4*j-1*(j > 0));
+	        // Grayscaling
+            resizedL[i*new_w+j] = 0.2126*imageL[orig_i*(4*w)+4*orig_j]+0.7152*imageL[orig_i*(4*w)+4*orig_j + 1]+0.0722*imageL[orig_i*(4*w)+4*orig_j + 2];
+            resizedR[i*new_w+j] = 0.2126*imageR[orig_i*(4*w)+4*orig_j]+0.7152*imageR[orig_i*(4*w)+4*orig_j + 1]+0.0722*imageR[orig_i*(4*w)+4*orig_j + 2];
+		}
+	}
 }
