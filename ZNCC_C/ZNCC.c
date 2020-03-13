@@ -263,24 +263,24 @@ void post_processing(uint8_t* IL, uint8_t* IR,
 void convertgray(const uint8_t* IL, const uint8_t* IR,
                 uint8_t* grayL, uint8_t* grayR, uint32_t w, uint32_t h) {
 
-	int32_t i, j, orig_i, orig_j;
+	int32_t i, j, original_i, original_j;
     //W and h of the grayscale image
     int32_t new_width = w / 4, new_height= h / 4;
 
 	for (i = 0; i < new_height; i++) {
 	    for (j = 0; j < new_width; j++) {
 	        // Calculating indices of the original image
-	        orig_i = (4*i-1*(i > 0));
-	        orig_j = (4*j-1*(j > 0));
+	        original_i = (4*i-1*(i > 0));
+	        original_j = (4*j-1*(j > 0));
 
             // Convert to grayscale
-            grayL[i * new_width + j] = 0.2126 * IL[orig_i*(4*w) + 4 * orig_j]
-                                + 0.7152 * IL[orig_i * (4 * w) + 4 * orig_j + 1]
-                                + 0.0722 * IL[orig_i * (4 * w) + 4 * orig_j + 2];
+            grayL[i * new_width + j] = 0.2126 * IL[original_i*(4*w) + 4 * original_j]
+                                + 0.7152 * IL[original_i * (4 * w) + 4 * original_j + 1]
+                                + 0.0722 * IL[original_i * (4 * w) + 4 * original_j + 2];
 
-            grayR[i * new_width + j] = 0.2126 * IR[orig_i * (4 * w) + 4 * orig_j]
-                                    + 0.7152 * IR[orig_i * (4 * w) + 4 * orig_j + 1]
-                                    + 0.0722 * IR[orig_i * (4 * w) + 4 * orig_j + 2];
+            grayR[i * new_width + j] = 0.2126 * IR[original_i * (4 * w) + 4 * original_j]
+                                    + 0.7152 * IR[original_i * (4 * w) + 4 * original_j + 1]
+                                    + 0.0722 * IR[original_i * (4 * w) + 4 * original_j + 2];
 		}
 	}
 }
