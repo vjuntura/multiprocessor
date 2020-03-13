@@ -26,8 +26,8 @@ void post_processing(unsigned char* IL, unsigned char* IR,
                       int Max_Disp, unsigned size,
                       unsigned char* result);
 
-void convertgray(const uint8_t* imageL, const uint8_t* imageR,
-                uint8_t* resizedL, uint8_t* resizedR, uint32_t w, uint32_t h);
+void convertgray(const uint8_t* IL, const uint8_t* IR,
+                uint8_t* grayL, uint8_t* grayR, uint32_t w, uint32_t h);
 
 
 int main(int argc, char *argv[]) {
@@ -185,7 +185,7 @@ void zncc(uint8_t* IL, uint8_t* IR,
                             !(j + Win_Y - d  >= 0) || !(j + Win_Y - d < width)) {
                             continue;
                         }
-                        
+
                         //Calculate zncc
                         int row = width * (i + Win_Y);
                         int col = j + Win_X;
@@ -239,7 +239,7 @@ void post_processing(uint8_t* IL, uint8_t* IR,
         color_nearest = 0;
         for(int j=0; j < width; j++){
             if (abs(IL[i*width + j] - IR[i*width + j]) < threshold) {
-                
+
                 result[i*width + j] = IL[i*width + j];
 
                 // // Exclude borders
@@ -259,23 +259,28 @@ void post_processing(uint8_t* IL, uint8_t* IR,
 
 }
 
-void convertgray(const uint8_t* imageL, const uint8_t* imageR, uint8_t* resizedL, uint8_t* resizedR, uint32_t w, uint32_t h)
-{
-    /* Downscaling and conversion to 8bit grayscale image */
+//Convert to grayscale
+void convertgray(const uint8_t* IL, const uint8_t* IR,
+                uint8_t* grayL, uint8_t* grayR, uint32_t w, uint32_t h) {
 
-	int32_t i, j; // Indices of the resized image
-    int32_t new_w=w/4, new_h=h/4; //  Width and height of the downscaled image
-    int32_t orig_i, orig_j; // Indices of the original image
+	int32_t i, j, orig_i, orig_j;
+    //W and h of the grayscale image
+    int32_t new_width = w / 4, new_height= h / 4;
 
-    // Iterating through the pixels of the downscaled image
-	for (i = 0; i < new_h; i++) {
-	    for (j = 0; j < new_w; j++) {
-	        // Calculating corresponding indices in the original image
+	for (i = 0; i < new_height; i++) {
+	    for (j = 0; j < new_width; j++) {
+	        // Calculating indices of the original image
 	        orig_i = (4*i-1*(i > 0));
 	        orig_j = (4*j-1*(j > 0));
-	        // Grayscaling
-            resizedL[i*new_w+j] = 0.2126*imageL[orig_i*(4*w)+4*orig_j]+0.7152*imageL[orig_i*(4*w)+4*orig_j + 1]+0.0722*imageL[orig_i*(4*w)+4*orig_j + 2];
-            resizedR[i*new_w+j] = 0.2126*imageR[orig_i*(4*w)+4*orig_j]+0.7152*imageR[orig_i*(4*w)+4*orig_j + 1]+0.0722*imageR[orig_i*(4*w)+4*orig_j + 2];
+
+            // Convert to grayscale
+            grayL[i * new_width + j] = 0.2126 * IL[orig_i*(4*w) + 4 * orig_j]
+                                + 0.7152 * IL[orig_i * (4 * w) + 4 * orig_j + 1]
+                                + 0.0722 * IL[orig_i * (4 * w) + 4 * orig_j + 2];
+
+            grayR[i * new_width + j] = 0.2126 * IR[orig_i * (4 * w) + 4 * orig_j]
+                                    + 0.7152 * IR[orig_i * (4 * w) + 4 * orig_j + 1]
+                                    + 0.0722 * IR[orig_i * (4 * w) + 4 * orig_j + 2];
 		}
 	}
 }
