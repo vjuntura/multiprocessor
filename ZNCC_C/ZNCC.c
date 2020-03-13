@@ -1,6 +1,4 @@
-//2d array indexing: https://stackoverflow.com/questions/2151084/map-a-2d-array-onto-a-1d-array
-
-//Compilation: gcc ZNCC.c lodepng.c -Wall -o paska -lm
+//Compilation: gcc ZNCC.c lodepng.c -Wall -o zncc -lm
 
 #include "lodepng.h"
 #include <stdio.h>
@@ -49,8 +47,8 @@ int main(int argc, char *argv[]) {
     unsigned bitdepth = 8;
 
     //Decode
-    lodepng_decode32_file(&original_IL, &width1, &height1, filenameL);//, LCT_GREY, bitdepth);
-    lodepng_decode32_file(&original_IR, &width2, &height2, filenameR);//, LCT_GREY, bitdepth);
+    lodepng_decode32_file(&original_IL, &width1, &height1, filenameL);
+    lodepng_decode32_file(&original_IR, &width2, &height2, filenameR);
     unsigned size1 = width1*height1;
     unsigned size2 = width2*height2;
 
