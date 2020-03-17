@@ -1,4 +1,4 @@
-//Compilation: gcc ZNCC.c lodepng.c -Wall -o zncc -lm
+//Compilation: gcc ZNCC.c lodepng.c -Wall -o zncc -lm -fopenmp
 
 #include "lodepng.h"
 #include <stdio.h>
@@ -22,8 +22,7 @@ void post_processing(unsigned char* IL, unsigned char* IR,
                       int Max_Disp, unsigned size,
                       unsigned char* resultMap);
 
-void convertgray(const uint8_t* IL, const uint8_t* IR,
-                uint8_t* grayL, uint8_t* grayR, uint32_t w, uint32_t h);
+void convertgray(const uint8_t* input, uint8_t* output, uint32_t w, uint32_t h);
 
 
 int main(int argc, char *argv[]) {
@@ -36,6 +35,9 @@ int main(int argc, char *argv[]) {
     const char* dimage1out_filename = "disparityMapL.png";
     const char* dimage2out_filename = "disparityMapR.png";
 
+    const char* grayL_filename = "grayL.png";
+    const char* grayR_filename = "grayR.png";
+
     uint8_t* original_IL = 0;
     uint8_t* original_IR = 0;
 
@@ -46,9 +48,21 @@ int main(int argc, char *argv[]) {
     uint32_t width1, height1, width2, height2;
     unsigned bitdepth = 8;
 
+    #pragma omp parallel sections
+    {
     //Decode
+    #pragma omp section
+    {
     lodepng_decode32_file(&original_IL, &width1, &height1, filenameL);
+    }
+
+    #pragma omp section
+    {
     lodepng_decode32_file(&original_IR, &width2, &height2, filenameR);
+    }
+    }
+
+
     unsigned size1 = width1*height1;
     unsigned size2 = width2*height2;
 
@@ -65,29 +79,53 @@ int main(int argc, char *argv[]) {
     uint32_t width = width1 / 4;
     uint32_t height = height1 / 4;
 
-    gray_IL = (uint8_t*)malloc(size * sizeof(uint8_t));
-    gray_IR = (uint8_t*)malloc(size * sizeof(uint8_t));
 
     //Convert to grayscale
-    convertgray(original_IL, original_IR, gray_IL, gray_IR, width1, height1);
+    #pragma omp parallel sections
+    {
+    #pragma omp section
+    {
+    gray_IL = (uint8_t*)malloc(size * sizeof(uint8_t));
+    convertgray(original_IL, gray_IL, width1, height1);
+    lodepng_encode_file(grayL_filename, gray_IL, width, height, LCT_GREY, bitdepth);
+    }
+
+    #pragma omp section
+    {
+    gray_IR = (uint8_t*)malloc(size * sizeof(uint8_t));
+    convertgray(original_IR, gray_IR, width1, height1);
+    lodepng_encode_file(grayR_filename, gray_IR, width, height, LCT_GREY, bitdepth);
+    }
+    }
 
     // Disparity maps
     uint8_t* DisparityMapL2R;
     uint8_t* DisparityMapR2L;
     uint8_t* resultMap;
 
-    DisparityMapL2R = (uint8_t*)malloc(size * sizeof(uint8_t));
-    DisparityMapR2L = (uint8_t*)malloc(size * sizeof(uint8_t));
+
+
     resultMap = (uint8_t*)malloc(size * sizeof(uint8_t));
 
     // Calculate disparity maps with zncc
     // Left to right
+    #pragma omp parallel sections
+    {
+    #pragma omp section
+    {
+    DisparityMapL2R = (uint8_t*)malloc(size * sizeof(uint8_t));
     zncc(gray_IL, gray_IR, width, height, max_disp, min_disp, DisparityMapL2R);
     lodepng_encode_file(dimage1out_filename, DisparityMapL2R, width, height, LCT_GREY, bitdepth);
+    }
 
     // Right to left
+    #pragma omp section
+    {
+    DisparityMapR2L = (uint8_t*)malloc(size * sizeof(uint8_t));
     zncc(gray_IR, gray_IL, width, height, min_disp, -max_disp, DisparityMapR2L);
     lodepng_encode_file(dimage2out_filename, DisparityMapR2L, width, height, LCT_GREY, bitdepth);
+    }
+    }
 
     post_processing(DisparityMapL2R, DisparityMapR2L, width, height, max_disp, size, resultMap);
     lodepng_encode_file(out_filename, resultMap, width, height, LCT_GREY, bitdepth);
@@ -234,27 +272,38 @@ void post_processing(uint8_t* IL, uint8_t* IR,
 }
 
 //Convert to grayscale
-void convertgray(const uint8_t* IL, const uint8_t* IR,
-                uint8_t* grayL, uint8_t* grayR, uint32_t w, uint32_t h) {
+void convertgray(const uint8_t* input, uint8_t* output, uint32_t w, uint32_t h) {
 
 	int32_t i, j, original_i, original_j;
     //W and h of the grayscale image
     int32_t new_width = w / 4, new_height= h / 4;
 
-	for (i = 0; i < new_height; i++) {
-	    for (j = 0; j < new_width; j++) {
+//    #pragma omp parallel for collapse(2)
+/*    for (i = 0; i < (new_width*new_height); i++) {
+        //printf("%d\n", i);
+        grayL[i] = 0.2126 * IL[i*4] + 0.7152 * IL[i*4 + 1] + 0.0722 * IL[i*4 + 2];
+
+        grayR[i] = 0.2126 * IR[i*4] + 0.7152 * IR[i*4 + 1] + 0.0722 * IR[i*4 + 2];
+        counter++;
+    }*/
+    //for (i = 0; i < new_height; i++) {
+	  //  for (j = 0; j < new_width; j++) {
+        #pragma omp parallel for schedule(dynamic,2)
+        for(uint32_t ij=0; ij<(new_width*new_height); ij++) {
+            i = ij / new_width;
+            j = ij % new_width;
 	        // Calculating indices of the original image
 	        original_i = (4*i-1*(i > 0));
 	        original_j = (4*j-1*(j > 0));
 
             // Convert to grayscale
-            grayL[i * new_width + j] = 0.2126 * IL[original_i*(4*w) + 4 * original_j]
-                                + 0.7152 * IL[original_i * (4 * w) + 4 * original_j + 1]
-                                + 0.0722 * IL[original_i * (4 * w) + 4 * original_j + 2];
+            output[i * new_width + j] = 0.2126 * input[original_i*(4*w) + 4 * original_j]
+                                + 0.7152 * input[original_i * (4 * w) + 4 * original_j + 1]
+                                + 0.0722 * input[original_i * (4 * w) + 4 * original_j + 2];
 
-            grayR[i * new_width + j] = 0.2126 * IR[original_i * (4 * w) + 4 * original_j]
+        /*    grayR[i * new_width + j] = 0.2126 * IR[original_i * (4 * w) + 4 * original_j]
                                     + 0.7152 * IR[original_i * (4 * w) + 4 * original_j + 1]
-                                    + 0.0722 * IR[original_i * (4 * w) + 4 * original_j + 2];
+                                    + 0.0722 * IR[original_i * (4 * w) + 4 * original_j + 2];*/
 		}
-	}
+	//}
 }
