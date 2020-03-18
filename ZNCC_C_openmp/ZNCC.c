@@ -8,10 +8,6 @@
 #include <stdbool.h>
 #include <time.h>
 
-
-#define windowX 20
-#define windowY 14
-
 void zncc(unsigned char* IL, unsigned char* IR,
           unsigned width, unsigned height,
           int Max_Disp, int Min_Disp,
@@ -48,6 +44,8 @@ int main(int argc, char *argv[]) {
     uint32_t width1, height1, width2, height2;
     unsigned bitdepth = 8;
 
+    time_t start = time(NULL);
+
     #pragma omp parallel sections
     {
     //Decode
@@ -79,20 +77,20 @@ int main(int argc, char *argv[]) {
     uint32_t width = width1 / 4;
     uint32_t height = height1 / 4;
 
+    gray_IL = (uint8_t*)malloc(size * sizeof(uint8_t));
+    gray_IR = (uint8_t*)malloc(size * sizeof(uint8_t));
 
     //Convert to grayscale
     #pragma omp parallel sections
     {
     #pragma omp section
     {
-    gray_IL = (uint8_t*)malloc(size * sizeof(uint8_t));
     convertgray(original_IL, gray_IL, width1, height1);
     lodepng_encode_file(grayL_filename, gray_IL, width, height, LCT_GREY, bitdepth);
     }
 
     #pragma omp section
     {
-    gray_IR = (uint8_t*)malloc(size * sizeof(uint8_t));
     convertgray(original_IR, gray_IR, width1, height1);
     lodepng_encode_file(grayR_filename, gray_IR, width, height, LCT_GREY, bitdepth);
     }
@@ -103,9 +101,9 @@ int main(int argc, char *argv[]) {
     uint8_t* DisparityMapR2L;
     uint8_t* resultMap;
 
-
-
     resultMap = (uint8_t*)malloc(size * sizeof(uint8_t));
+    DisparityMapL2R = (uint8_t*)malloc(size * sizeof(uint8_t));
+    DisparityMapR2L = (uint8_t*)malloc(size * sizeof(uint8_t));
 
     // Calculate disparity maps with zncc
     // Left to right
@@ -113,7 +111,6 @@ int main(int argc, char *argv[]) {
     {
     #pragma omp section
     {
-    DisparityMapL2R = (uint8_t*)malloc(size * sizeof(uint8_t));
     zncc(gray_IL, gray_IR, width, height, max_disp, min_disp, DisparityMapL2R);
     lodepng_encode_file(dimage1out_filename, DisparityMapL2R, width, height, LCT_GREY, bitdepth);
     }
@@ -121,7 +118,6 @@ int main(int argc, char *argv[]) {
     // Right to left
     #pragma omp section
     {
-    DisparityMapR2L = (uint8_t*)malloc(size * sizeof(uint8_t));
     zncc(gray_IR, gray_IL, width, height, min_disp, -max_disp, DisparityMapR2L);
     lodepng_encode_file(dimage2out_filename, DisparityMapR2L, width, height, LCT_GREY, bitdepth);
     }
@@ -129,6 +125,8 @@ int main(int argc, char *argv[]) {
 
     post_processing(DisparityMapL2R, DisparityMapR2L, width, height, max_disp, size, resultMap);
     lodepng_encode_file(out_filename, resultMap, width, height, LCT_GREY, bitdepth);
+
+    printf("%.2f\n", (double)(time(NULL) - start));
 
     free(DisparityMapL2R);
     free(DisparityMapR2L);
@@ -144,7 +142,8 @@ void zncc(uint8_t* IL, uint8_t* IR,
           int max_disp, int min_disp,
           uint8_t* DisparityMap)
 {
-
+    int windowX = 20;
+    int windowY = 14;
     float sum_of_Left_win = 0;
     float sum_of_Right_win = 0;
     int Number_of_win_pixels = windowX * windowY;
@@ -278,20 +277,8 @@ void convertgray(const uint8_t* input, uint8_t* output, uint32_t w, uint32_t h) 
     //W and h of the grayscale image
     int32_t new_width = w / 4, new_height= h / 4;
 
-//    #pragma omp parallel for collapse(2)
-/*    for (i = 0; i < (new_width*new_height); i++) {
-        //printf("%d\n", i);
-        grayL[i] = 0.2126 * IL[i*4] + 0.7152 * IL[i*4 + 1] + 0.0722 * IL[i*4 + 2];
-
-        grayR[i] = 0.2126 * IR[i*4] + 0.7152 * IR[i*4 + 1] + 0.0722 * IR[i*4 + 2];
-        counter++;
-    }*/
-    //for (i = 0; i < new_height; i++) {
-	  //  for (j = 0; j < new_width; j++) {
-        #pragma omp parallel for schedule(dynamic,2)
-        for(uint32_t ij=0; ij<(new_width*new_height); ij++) {
-            i = ij / new_width;
-            j = ij % new_width;
+    for (i = 0; i < new_height; i++) {
+	   for (j = 0; j < new_width; j++) {
 	        // Calculating indices of the original image
 	        original_i = (4*i-1*(i > 0));
 	        original_j = (4*j-1*(j > 0));
@@ -300,10 +287,6 @@ void convertgray(const uint8_t* input, uint8_t* output, uint32_t w, uint32_t h) 
             output[i * new_width + j] = 0.2126 * input[original_i*(4*w) + 4 * original_j]
                                 + 0.7152 * input[original_i * (4 * w) + 4 * original_j + 1]
                                 + 0.0722 * input[original_i * (4 * w) + 4 * original_j + 2];
-
-        /*    grayR[i * new_width + j] = 0.2126 * IR[original_i * (4 * w) + 4 * original_j]
-                                    + 0.7152 * IR[original_i * (4 * w) + 4 * original_j + 1]
-                                    + 0.0722 * IR[original_i * (4 * w) + 4 * original_j + 2];*/
 		}
-	//}
+	}
 }

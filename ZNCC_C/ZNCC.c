@@ -46,6 +46,8 @@ int main(int argc, char *argv[]) {
     uint32_t width1, height1, width2, height2;
     unsigned bitdepth = 8;
 
+    time_t start = time(NULL);
+
     //Decode
     lodepng_decode32_file(&original_IL, &width1, &height1, filenameL);
     lodepng_decode32_file(&original_IR, &width2, &height2, filenameR);
@@ -91,6 +93,8 @@ int main(int argc, char *argv[]) {
 
     post_processing(DisparityMapL2R, DisparityMapR2L, width, height, max_disp, size, resultMap);
     lodepng_encode_file(out_filename, resultMap, width, height, LCT_GREY, bitdepth);
+
+    printf("%.2f\n", (double)(time(NULL) - start));
 
     free(DisparityMapL2R);
     free(DisparityMapR2L);
