@@ -60,7 +60,6 @@ int main(int argc, char *argv[]) {
     }
     }
 
-
     unsigned size1 = width1*height1;
     unsigned size2 = width2*height2;
 
